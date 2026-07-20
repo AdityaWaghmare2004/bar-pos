@@ -1,0 +1,111 @@
+:root {
+  /* Restro Theme Neutral Palette (Clean, modern light mode) */
+  --text: #4a4552;
+  --text-h: #0f0d13;
+  --bg: #fafafa;
+  --surface: #ffffff; /* Added for cards/tables against the background */
+  --border: #e2e0e5;
+  --code-bg: #f1f0f5;
+  
+  /* Brand Accent (Sleek dark purple/indigo) */
+  --accent: #8b26e0;
+  --accent-bg: rgba(139, 38, 224, 0.08);
+  --accent-border: rgba(139, 38, 224, 0.3);
+  
+  /* Critical Semantic Colors for Restro Operations (Orders, Stock, States) */
+  --success: #10b981;    /* Ready / Active Table */
+  --warning: #f59e0b;    /* Preparing / Low Stock */
+  --danger: #ef4444;     /* Delayed / Out of Stock */
+  
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+
+  /* Modern Sans Stack optimized for UI legibility */
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  /* Tightened up for dense UI layouts rather than articles */
+  font: 15px/1.4 var(--sans);
+  letter-spacing: -0.01em;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 14px; /* Shrink slightly on tablets/POS terminals to fit more data */
+  }
+}
+
+/* Restro apps usually thrive in Dark Mode (Dim environments/Night shifts) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #a3a1a8;
+    --text-h: #f3f3f5;
+    --bg: #0f0e12;      /* Rich, deep night-mode background */
+    --surface: #17161c; /* Elevated cards/modals/sidebar */
+    --border: #26242c;
+    --code-bg: #201f26;
+    --accent: #d5a3ff;
+    --accent-bg: rgba(213, 163, 255, 0.12);
+    --accent-border: rgba(213, 163, 255, 0.4);
+    
+    --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+}
+
+#root {
+  /* Changed from fixed width to a robust full-screen dashboard layout */
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  text-align: left; /* Changed from center: critical for reading lists/tables */
+}
+
+/* UI Headings: punchy and compact */
+h1, h2, h3 {
+  font-family: var(--sans);
+  font-weight: 600; /* Increased weight slightly for better hierarchy */
+  color: var(--text-h);
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 32px;
+  margin: 24px 0 16px;
+  @media (max-width: 1024px) {
+    font-size: 24px;
+  }
+}
+
+h2 {
+  font-size: 20px;
+  margin: 0 0 12px;
+  @media (max-width: 1024px) {
+    font-size: 18px;
+  }
+}
+
+/* Functional components like badging, counters, prices */
+code, 
+.counter {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  display: inline-flex;
+  align-items: center;
+}
