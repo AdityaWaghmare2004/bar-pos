@@ -307,7 +307,8 @@ td { font-feature-settings: "tnum"; }
 .print-only { display: none; }
 
 @media print {
-  body * { display: none !important; } /* Wipe the main view cleanly */
+  .no-print { display: none !important; }
+  .print-only { display: block; }
   
   .print-only, .print-only * { display: block !important; } /* Target absolute print modules only */
   

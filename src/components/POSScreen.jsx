@@ -32,7 +32,15 @@ export default function POSScreen() {
 
   useEffect(() => {
     if (lastOrder) {
-      window.print();
+      // Wait for an actual paint before printing. Firing window.print()
+      // synchronously here can run before the browser has painted the
+      // receipt — especially on slower mobile devices — which is what
+      // caused printing/exporting a blank page.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.print();
+        });
+      });
     }
   }, [lastOrder]);
 
