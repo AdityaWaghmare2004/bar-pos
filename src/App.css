@@ -307,6 +307,11 @@ td { font-feature-settings: "tnum"; }
 .print-only { display: none; }
 
 @media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
   .no-print { display: none !important; }
   .print-only { display: block; }
   
