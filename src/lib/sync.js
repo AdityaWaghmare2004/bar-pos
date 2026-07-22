@@ -64,8 +64,9 @@ async function syncOrders() {
 
 async function syncInventory() {
   const deltas = await getPendingDeltas();
-  if (deltas.length === 0) return false;
+  let changed = false;
 
+  // Push: apply every local delta atomically server-side.
   for (const d of deltas) {
     const { error } = await supabase.rpc('apply_inventory_delta', {
       p_menu_item_id: d.menu_item_id,
@@ -73,9 +74,37 @@ async function syncInventory() {
     });
     if (error) throw error;
     await clearPendingDelta(d.id);
+    changed = true;
   }
 
-  return true;
+  // Pull: fetch the merged, authoritative stock counts (now reflecting
+  // every device's deltas, not just this one) and overwrite local
+  // values. Without this step, a stock change made on one device never
+  // shows up on another — each device only ever saw its OWN deltas
+  // applied locally, never anyone else's.
+  const { data: remoteInventory, error: pullError } = await supabase
+    .from('inventory')
+    .select('*');
+  if (pullError) throw pullError;
+
+  if (remoteInventory?.length > 0) {
+    const db = await getDB();
+    const tx = db.transaction('inventory', 'readwrite');
+    for (const row of remoteInventory) {
+      const local = await tx.objectStore('inventory').get(row.menu_item_id);
+      if (local?.stock !== row.stock) {
+        await tx.objectStore('inventory').put({
+          menu_item_id: row.menu_item_id,
+          stock: row.stock,
+          synced: true,
+        });
+        changed = true;
+      }
+    }
+    await tx.done;
+  }
+
+  return changed;
 }
 
 async function syncMenuItems() {
