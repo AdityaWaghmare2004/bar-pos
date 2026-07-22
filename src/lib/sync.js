@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, hasSupabaseConfig } from './supabase';
 import { usePosStore } from '../store/posStore';
 import {
   getAllMenuItems,
@@ -14,7 +14,7 @@ let syncing = false;
 
 export async function runSync() {
   if (syncing) return; // don't overlap runs
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || !hasSupabaseConfig()) return;
   syncing = true;
 
   let inventoryChanged = false;
@@ -48,6 +48,8 @@ async function syncOrders() {
     total: o.total,
     created_at: new Date(o.created_at).toISOString(),
     terminal_id: o.terminal_id,
+    table_id: o.table_id,
+    table_name: o.table_name,
   }));
 
   // upsert + ignoreDuplicates makes a re-sent order after a dropped

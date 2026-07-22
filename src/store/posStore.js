@@ -12,20 +12,31 @@ const TERMINAL_ID = (() => {
 
 export const usePosStore = create((set, get) => ({
   menuItems: [],
-  inventory: [], // [{menu_item_id, stock}]
-  cart: [], // [{menu_item_id, name, price, qty}]
+  inventory: [],
   orders: [],
   settings: null,
+  tables: [],
+  activeTableId: null,
+  cartsByTable: {}, // { [tableId]: [{menu_item_id, name, price, qty}] }
 
   async loadAll() {
     try {
-      const [menuItems, inventory, orders, settings] = await Promise.all([
+      const [menuItems, inventory, orders, settings, tables, openCarts] = await Promise.all([
         db.getAllMenuItems(),
         db.getInventory(),
         db.getAllOrders(),
         db.getSettings(),
+        db.getTables(),
+        db.getAllOpenCarts(),
       ]);
-      set({ menuItems, inventory, orders, settings });
+
+      const cartsByTable = {};
+      for (const oc of openCarts) cartsByTable[oc.table_id] = oc.cart;
+
+      set((state) => ({
+        menuItems, inventory, orders, settings, tables, cartsByTable,
+        activeTableId: state.activeTableId ?? tables[0]?.id ?? null,
+      }));
     } catch (err) {
       console.error('[bar-pos] loadAll failed — likely a blocked IndexedDB upgrade. Close other tabs of this app and reload.', err);
     }
@@ -58,61 +69,97 @@ export const usePosStore = create((set, get) => ({
     await get().loadAll();
   },
 
+  // ---------- Tables ----------
+
+  async addTable(name) {
+    await db.addTable(name);
+    await get().loadAll();
+  },
+
+  async deleteTable(id) {
+    await db.deleteTable(id);
+    await db.clearOpenCart(id);
+    set((state) => {
+      const carts = { ...state.cartsByTable };
+      delete carts[id];
+      return {
+        cartsByTable: carts,
+        activeTableId: state.activeTableId === id ? null : state.activeTableId,
+      };
+    });
+    await get().loadAll();
+  },
+
+  setActiveTable(tableId) {
+    set({ activeTableId: tableId });
+  },
+
+  // ---------- Cart (scoped to the active table) ----------
+
   addToCart(item) {
+    const tableId = get().activeTableId;
+    if (!tableId) return;
+
     set((state) => {
       const stock = state.inventory.find((i) => i.menu_item_id === item.id)?.stock ?? 0;
-      const existing = state.cart.find((c) => c.menu_item_id === item.id);
+      const cart = state.cartsByTable[tableId] || [];
+      const existing = cart.find((c) => c.menu_item_id === item.id);
       const currentQty = existing?.qty ?? 0;
       const available = Math.max(stock - currentQty, 0);
       if (available <= 0) return state;
 
-      if (existing) {
-        return {
-          cart: state.cart.map((c) =>
-            c.menu_item_id === item.id ? { ...c, qty: c.qty + 1 } : c
-          ),
-        };
-      }
-      return {
-        cart: [
-          ...state.cart,
-          { menu_item_id: item.id, name: item.name, price: item.price, qty: 1 },
-        ],
-      };
+      const newCart = existing
+        ? cart.map((c) => (c.menu_item_id === item.id ? { ...c, qty: c.qty + 1 } : c))
+        : [...cart, { menu_item_id: item.id, name: item.name, price: item.price, qty: 1 }];
+
+      db.setOpenCart(tableId, newCart); // persist so a refresh doesn't lose this table's order
+      return { cartsByTable: { ...state.cartsByTable, [tableId]: newCart } };
     });
   },
 
   updateCartQty(menuItemId, qty) {
+    const tableId = get().activeTableId;
+    if (!tableId) return;
+
     set((state) => {
+      const cart = state.cartsByTable[tableId] || [];
+      let newCart;
       if (qty <= 0) {
-        return { cart: state.cart.filter((c) => c.menu_item_id !== menuItemId) };
+        newCart = cart.filter((c) => c.menu_item_id !== menuItemId);
+      } else {
+        const stock = state.inventory.find((i) => i.menu_item_id === menuItemId)?.stock ?? 0;
+        const clampedQty = Math.min(qty, stock);
+        newCart = cart.map((c) => (c.menu_item_id === menuItemId ? { ...c, qty: clampedQty } : c));
       }
 
-      const stock = state.inventory.find((i) => i.menu_item_id === menuItemId)?.stock ?? 0;
-      const clampedQty = Math.min(qty, stock);
-
-      return {
-        cart: state.cart.map((c) =>
-          c.menu_item_id === menuItemId ? { ...c, qty: clampedQty } : c
-        ),
-      };
+      db.setOpenCart(tableId, newCart);
+      return { cartsByTable: { ...state.cartsByTable, [tableId]: newCart } };
     });
   },
 
   clearCart() {
-    set({ cart: [] });
+    const tableId = get().activeTableId;
+    if (!tableId) return;
+    db.clearOpenCart(tableId);
+    set((state) => ({ cartsByTable: { ...state.cartsByTable, [tableId]: [] } }));
   },
 
   cartTotal() {
+    const tableId = get().activeTableId;
+    const cart = get().cartsByTable[tableId] || [];
     const taxRate = get().settings?.tax_rate ?? 0.05;
-    const subtotal = get().cart.reduce((sum, c) => sum + c.price * c.qty, 0);
+    const subtotal = cart.reduce((sum, c) => sum + c.price * c.qty, 0);
     const tax = subtotal * taxRate;
     return { subtotal, tax, total: subtotal + tax };
   },
 
   async checkout() {
-    const cart = get().cart;
+    const tableId = get().activeTableId;
+    if (!tableId) return null;
+    const cart = get().cartsByTable[tableId] || [];
     if (cart.length === 0) return null;
+
+    const table = get().tables.find((t) => t.id === tableId);
     const { subtotal, tax, total } = get().cartTotal();
 
     const order = await db.createOrderWithInventoryDeltas(
@@ -122,6 +169,8 @@ export const usePosStore = create((set, get) => ({
         tax,
         total,
         terminal_id: TERMINAL_ID,
+        table_id: tableId,
+        table_name: table?.name ?? null,
       },
       cart.map((line) => ({
         menu_item_id: line.menu_item_id,
@@ -130,7 +179,8 @@ export const usePosStore = create((set, get) => ({
       }))
     );
 
-    set({ cart: [] });
+    await db.clearOpenCart(tableId);
+    set((state) => ({ cartsByTable: { ...state.cartsByTable, [tableId]: [] } }));
     await get().loadAll();
     return order;
   },

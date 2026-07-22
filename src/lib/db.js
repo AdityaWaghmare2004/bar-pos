@@ -12,9 +12,10 @@ import { openDB } from 'idb';
 //   orders      -> append-only, one owner (the terminal that created it) -> insert-once, idempotent on uuid
 
 const DB_NAME = 'bar-pos';
-const DB_VERSION = 2; // bumped when the `settings` store was added
+const DB_VERSION = 3; // bumped when `tables` and `open_carts` were added
 
 let _dbInstance = null;
+let _seedingTables = null;
 
 export async function getDB() {
   if (_dbInstance) return _dbInstance;
@@ -56,6 +57,23 @@ export async function getDB() {
       // rarely, one device at a time.
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings', { keyPath: 'id' });
+      }
+
+      // tables: fixed list (Table 1, Table 2, ...). Local-only for now —
+      // not synced to Supabase, so "occupied" status is per-terminal.
+      // Known limitation: a second terminal won't see this terminal's
+      // open tables. Fine for a single-terminal bar; would need syncing
+      // (same LWW pattern as menu_items) if multiple terminals need a
+      // shared live view of table status.
+      if (!db.objectStoreNames.contains('tables')) {
+        db.createObjectStore('tables', { keyPath: 'id' });
+      }
+
+      // open_carts: one row per table holding its in-progress order.
+      // Persisted (not just React state) so a refresh mid-shift doesn't
+      // lose a half-built order for some other table.
+      if (!db.objectStoreNames.contains('open_carts')) {
+        db.createObjectStore('open_carts', { keyPath: 'table_id' });
       }
     },
     // Fires on THIS tab's existing connection when another tab/window
@@ -150,19 +168,22 @@ export async function clearPendingDelta(id) {
 // ---------- Orders ----------
 
 export async function createOrder(order) {
-  const db = await getDB();
+  const database = await getDB();
   const record = {
     ...order,
     id: crypto.randomUUID(),
     created_at: Date.now(),
     synced: false,
   };
-  await db.put('orders', record);
+  await database.put('orders', record);
   return record;
 }
 
+// Wraps the order insert + every stock delta it causes into a SINGLE
+// IndexedDB transaction. Without this, a crash mid-checkout could leave
+// an order recorded with stock never deducted (or the reverse).
 export async function createOrderWithInventoryDeltas(order, deltas) {
-  const db = await getDB();
+  const database = await getDB();
   const record = {
     ...order,
     id: crypto.randomUUID(),
@@ -170,7 +191,7 @@ export async function createOrderWithInventoryDeltas(order, deltas) {
     synced: false,
   };
 
-  const tx = db.transaction(['orders', 'inventory', 'pending_deltas'], 'readwrite');
+  const tx = database.transaction(['orders', 'inventory', 'pending_deltas'], 'readwrite');
   await tx.objectStore('orders').put(record);
 
   for (const delta of deltas) {
@@ -237,6 +258,59 @@ export async function updateSettings(changes) {
   const record = { ...current, ...changes, id: SETTINGS_ID, updated_at: Date.now(), synced: false };
   await db.put('settings', record);
   return record;
+}
+
+// ---------- Tables ----------
+
+export async function getTables() {
+  const database = await getDB();
+  const tables = await database.getAll('tables');
+  if (tables.length > 0) return tables;
+
+  if (!_seedingTables) {
+    _seedingTables = (async () => {
+      const defaults = Array.from({ length: 8 }, (_, i) => ({
+        id: crypto.randomUUID(),
+        name: `Table ${i + 1}`,
+      }));
+      const tx = database.transaction('tables', 'readwrite');
+      for (const t of defaults) await tx.objectStore('tables').put(t);
+      await tx.done;
+      return defaults;
+    })();
+  }
+
+  return _seedingTables;
+}
+
+export async function addTable(name) {
+  const database = await getDB();
+  const table = { id: crypto.randomUUID(), name };
+  await database.put('tables', table);
+  return table;
+}
+
+export async function deleteTable(id) {
+  const database = await getDB();
+  await database.delete('tables', id);
+}
+
+// ---------- Open carts (one per table, persisted so a refresh doesn't
+// lose an in-progress order) ----------
+
+export async function getAllOpenCarts() {
+  const database = await getDB();
+  return database.getAll('open_carts');
+}
+
+export async function setOpenCart(tableId, cart) {
+  const database = await getDB();
+  await database.put('open_carts', { table_id: tableId, cart, updated_at: Date.now() });
+}
+
+export async function clearOpenCart(tableId) {
+  const database = await getDB();
+  await database.delete('open_carts', tableId);
 }
 
 // ---------- Full DB export/import (last-resort manual backup, kept

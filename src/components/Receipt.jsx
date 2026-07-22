@@ -11,6 +11,7 @@ export default function Receipt({ order }) {
         {settings?.address && <div>{settings.address}</div>}
         {settings?.phone && <div>{settings.phone}</div>}
         <div>{date.toLocaleString()}</div>
+        {order.table_name && <div>{order.table_name}</div>}
         <div>Order #{order.id.slice(0, 8)}</div>
       </div>
       <hr />

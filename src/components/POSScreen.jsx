@@ -2,10 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePosStore } from '../store/posStore';
 import Receipt from './Receipt';
 
+const EMPTY_CART = [];
+
 export default function POSScreen() {
   const menuItems = usePosStore((s) => s.menuItems);
   const inventory = usePosStore((s) => s.inventory);
-  const cart = usePosStore((s) => s.cart);
+  const cartsByTable = usePosStore((s) => s.cartsByTable);
+  const activeTableId = usePosStore((s) => s.activeTableId);
+  const cart = useMemo(
+    () => cartsByTable?.[activeTableId] ?? EMPTY_CART,
+    [cartsByTable, activeTableId]
+  );
   const addToCart = usePosStore((s) => s.addToCart);
   const updateCartQty = usePosStore((s) => s.updateCartQty);
   const cartTotal = usePosStore((s) => s.cartTotal);

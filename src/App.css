@@ -4,6 +4,152 @@
   --line: #ddd;
   --accent: #2f6f4f;
   --danger: #b3432b;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  /* Without this, browsers running in dark mode apply their own default
+     text color to native controls (button, input) regardless of the
+     color you set on body — that's what made the header/buttons go
+     white-on-white. This pins the page to the light palette we designed. */
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); }
+
+/* Native controls don't reliably inherit body's color — set it explicitly. */
+button, input { color: var(--ink); font-family: inherit; }
+
+.app { max-width: 1100px; margin: 0 auto; padding: 0 16px 40px; }
+
+.app-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 0; border-bottom: 2px solid var(--ink);
+}
+.app-header h1 { font-size: 1.3rem; margin: 0; color: var(--ink); }
+.app-header nav button {
+  margin-left: 8px; padding: 8px 14px; border: 1px solid var(--ink);
+  background: none; cursor: pointer; border-radius: 4px; color: var(--ink);
+}
+.app-header nav button.active { background: var(--ink); color: var(--paper); }
+
+.pos-screen { display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-top: 20px; }
+
+.table-bar {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;
+}
+.table-chip {
+  position: relative; padding: 8px 16px; border: 1px solid var(--line);
+  border-radius: 20px; background: white; cursor: pointer; font-weight: 500;
+  color: var(--ink);
+}
+.table-chip.active { background: var(--ink); color: white; border-color: var(--ink); }
+.table-chip .occupied-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger); margin-left: 6px; vertical-align: middle;
+}
+.table-chip.active .occupied-dot { background: #ffb4a2; }
+.menu-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px; align-content: start;
+}
+.menu-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: white; cursor: pointer; text-align: left;
+}
+.menu-tile:disabled { opacity: 0.4; cursor: not-allowed; }
+.tile-name { font-weight: 600; }
+.tile-price { color: var(--accent); }
+.tile-stock { font-size: 0.75rem; color: #888; }
+
+.cart {
+  border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+  background: white; height: fit-content;
+}
+.cart-line { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; gap: 8px; }
+.qty-control { display: flex; align-items: center; gap: 6px; }
+.qty-control button { width: 26px; height: 26px; border-radius: 4px; border: 1px solid var(--line); background: white; cursor: pointer; }
+.cart-totals { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.cart-totals div { display: flex; justify-content: space-between; margin: 4px 0; }
+.grand-total { font-weight: 700; font-size: 1.1rem; }
+.checkout-btn {
+  width: 100%; margin-top: 12px; padding: 12px; background: var(--accent);
+  color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer;
+}
+.checkout-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 12px; background: white; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.low-stock { color: var(--danger); font-weight: 700; }
+
+.menu-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.menu-form input { padding: 8px; border: 1px solid var(--line); border-radius: 4px; }
+.menu-form button { padding: 8px 14px; border: none; background: var(--accent); color: white; border-radius: 4px; cursor: pointer; }
+
+.business-info-card {
+  border: 1px solid var(--line); border-radius: 16px; padding: 24px; background: white;
+}
+.business-info-card h3 { font-size: 1.4rem; margin: 0 0 16px; }
+.bar-details-form { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
+.bar-details-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; font-weight: 500; }
+.bar-details-form input, .bar-details-form textarea {
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); font-size: 1rem; font-family: inherit; resize: vertical;
+}
+.bar-details-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.bar-details-form button {
+  align-self: flex-start; padding: 12px 22px; border: none; border-radius: 10px;
+  background: #0f1729; color: white; font-weight: 600; cursor: pointer; font-size: 0.95rem;
+}
+
+.empty-hint { color: #888; font-style: italic; }
+.status-msg { margin-top: 10px; color: var(--accent); }
+
+/* ---- Print / receipt ---- */
+.print-only { display: none; }
+
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  .no-print { display: none !important; }
+  .print-only { display: block; }
+
+  /* Force light background + black text explicitly. Without !important
+     here, some mobile browsers apply their own dark-mode rendering when
+     printing/exporting to PDF and ignore the plain (non-!important)
+     background/color rules above — that's what was turning the receipt
+     solid black on phones. */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .app { max-width: none; padding: 0; margin: 0; background: #ffffff !important; }
+
+  .receipt {
+    width: 58mm;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 4mm;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .receipt * { background: #ffffff !important; color: #000000 !important; }
+  .receipt-header { text-align: center; margin-bottom: 6px; }
+  .receipt-line { display: flex; justify-content: space-between; }
+  .receipt-line.total { font-weight: 700; font-size: 13px; }
+  .receipt-footer { text-align: center; margin-top: 8px; }
+}
+
+
+:root {
+  --ink: #1c1c1c;
+  --paper: #fafaf8;
+  --line: #ddd;
+  --accent: #2f6f4f;
+  --danger: #b3432b;
   
   /* Additional functional variables for state and lighting */
   --surface: #ffffff;
@@ -357,4 +503,4 @@ td { font-feature-settings: "tnum"; }
     margin-top: 16px; 
     font-size: 11px !important;
   }
-}
+} 

@@ -11,6 +11,11 @@ export default function SettingsScreen() {
   const updateSettings = usePosStore((s) => s.updateSettings);
   const [form, setForm] = useState(null);
 
+  const tables = usePosStore((s) => s.tables);
+  const addTable = usePosStore((s) => s.addTable);
+  const deleteTable = usePosStore((s) => s.deleteTable);
+  const [newTableName, setNewTableName] = useState('');
+
   useEffect(() => {
     if (settings) setForm({ ...settings, tax_rate: (settings.tax_rate * 100).toString() });
   }, [settings]);
@@ -22,10 +27,17 @@ export default function SettingsScreen() {
       address: form.address,
       phone: form.phone,
       currency: form.currency,
-      tax_rate: parseFloat(form.tax_rate) / 100, // stored as decimal internally, entered as %
+      tax_rate: parseFloat(form.tax_rate) / 100,
       receipt_footer: form.receipt_footer,
     });
     setStatus('Bar details saved.');
+  }
+
+  async function handleAddTable(e) {
+    e.preventDefault();
+    if (!newTableName.trim()) return;
+    await addTable(newTableName.trim());
+    setNewTableName('');
   }
 
   async function handleExport() {
@@ -104,6 +116,30 @@ export default function SettingsScreen() {
             <button type="submit">Save Settings</button>
           </form>
         )}
+      </section>
+
+      <section className="business-info-card">
+        <h3>Tables</h3>
+        <p>Add or remove tables. Deleting a table also discards any in-progress order on it.</p>
+        <form className="menu-form" onSubmit={handleAddTable}>
+          <input
+            placeholder="Table name (e.g. Table 9, Patio 1)"
+            value={newTableName}
+            onChange={(e) => setNewTableName(e.target.value)}
+          />
+          <button type="submit">Add Table</button>
+        </form>
+        <table>
+          <thead><tr><th>Name</th><th></th></tr></thead>
+          <tbody>
+            {tables.map((t) => (
+              <tr key={t.id}>
+                <td>{t.name}</td>
+                <td><button onClick={() => deleteTable(t.id)}>Delete</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
 
       <section>
