@@ -108,12 +108,20 @@ export async function upsertMenuItem(item) {
 
 export async function getAllMenuItems() {
   const db = await getDB();
+  const all = await db.getAll('menu_items');
+  return all.filter((item) => !item.deleted);
+}
+
+export async function getAllMenuItemsIncludingDeleted() {
+  const db = await getDB();
   return db.getAll('menu_items');
 }
 
 export async function deleteMenuItem(id) {
   const db = await getDB();
-  await db.delete('menu_items', id);
+  const existing = await db.get('menu_items', id);
+  if (!existing) return;
+  await db.put('menu_items', { ...existing, deleted: true, updated_at: Date.now(), synced: false });
 }
 
 // ---------- Inventory ----------

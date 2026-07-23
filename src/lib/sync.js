@@ -2,6 +2,7 @@ import { supabase, hasSupabaseConfig } from './supabase';
 import { usePosStore } from '../store/posStore';
 import {
   getAllMenuItems,
+  getAllMenuItemsIncludingDeleted,
   getAllOrders,
   getPendingDeltas,
   clearPendingDelta,
@@ -108,7 +109,7 @@ async function syncInventory() {
 }
 
 async function syncMenuItems() {
-  const items = await getAllMenuItems();
+  const items = await getAllMenuItemsIncludingDeleted();
   const db = await getDB();
 
   const { data: remoteItems, error: pullError } = await supabase
@@ -131,6 +132,7 @@ async function syncMenuItems() {
           name: remoteItem.name,
           price: Number(remoteItem.price),
           category: remoteItem.category,
+          deleted: Boolean(remoteItem.deleted),
           updated_at: remoteUpdatedAt,
           synced: true,
         });
@@ -148,6 +150,7 @@ async function syncMenuItems() {
         p_name: item.name,
         p_price: item.price,
         p_category: item.category ?? null,
+        p_deleted: Boolean(item.deleted),
         p_updated_at: new Date(item.updated_at).toISOString(),
       });
       if (error) throw error;

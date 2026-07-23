@@ -7,6 +7,8 @@ const EMPTY_CART = [];
 export default function POSScreen() {
   const menuItems = usePosStore((s) => s.menuItems);
   const inventory = usePosStore((s) => s.inventory);
+  const tables = usePosStore((s) => s.tables);
+  const setActiveTable = usePosStore((s) => s.setActiveTable);
   const cartsByTable = usePosStore((s) => s.cartsByTable);
   const activeTableId = usePosStore((s) => s.activeTableId);
   const cart = useMemo(
@@ -25,6 +27,8 @@ export default function POSScreen() {
   const stockFor = (id) => inventory.find((i) => i.menu_item_id === id)?.stock ?? 0;
   const cartQtyFor = (id) => cart.find((c) => c.menu_item_id === id)?.qty ?? 0;
   const availableStockFor = (id) => Math.max(stockFor(id) - cartQtyFor(id), 0);
+  const isTableOccupied = (tableId) => (cartsByTable?.[tableId] || []).length > 0;
+
   const categories = useMemo(() => {
     const unique = new Set(menuItems.map((item) => item.category || 'Uncategorized'));
     return ['All', ...Array.from(unique)];
@@ -39,10 +43,6 @@ export default function POSScreen() {
 
   useEffect(() => {
     if (lastOrder) {
-      // Wait for an actual paint before printing. Firing window.print()
-      // synchronously here can run before the browser has painted the
-      // receipt — especially on slower mobile devices — which is what
-      // caused printing/exporting a blank page.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           window.print();
@@ -60,6 +60,27 @@ export default function POSScreen() {
 
   return (
     <div className="pos-screen">
+      <section className="table-bar no-print">
+        {tables.map((table) => (
+          <button
+            key={table.id}
+            type="button"
+            className={
+              'table-chip' +
+              (table.id === activeTableId ? ' active' : '') +
+              (isTableOccupied(table.id) ? ' occupied' : '')
+            }
+            onClick={() => setActiveTable(table.id)}
+          >
+            {table.name}
+            {isTableOccupied(table.id) && <span className="occupied-dot" />}
+          </button>
+        ))}
+        {tables.length === 0 && (
+          <p className="empty-hint">No tables yet — add some in Settings.</p>
+        )}
+      </section>
+
       <section className="menu-controls no-print">
         <div className="category-tabs">
           {categories.map((category) => (
@@ -82,7 +103,7 @@ export default function POSScreen() {
             <button
               key={item.id}
               className="menu-tile"
-              disabled={availableStock <= 0}
+              disabled={availableStock <= 0 || !activeTableId}
               onClick={() => addToCart(item)}
             >
               <span className="tile-name">{item.name}</span>
@@ -99,7 +120,7 @@ export default function POSScreen() {
       </section>
 
       <aside className="cart no-print">
-        <h2>Current Order</h2>
+        <h2>{tables.find((t) => t.id === activeTableId)?.name || 'Select a table'}</h2>
         {cart.length === 0 && <p className="empty-hint">Cart is empty</p>}
         {cart.map((line) => (
           <div key={line.menu_item_id} className="cart-line">
@@ -128,7 +149,7 @@ export default function POSScreen() {
           <div><span>Tax</span><span>{cur}{tax.toFixed(2)}</span></div>
           <div className="grand-total"><span>Total</span><span>{cur}{total.toFixed(2)}</span></div>
         </div>
-        <button className="checkout-btn" disabled={cart.length === 0} onClick={handleCheckout}>
+        <button className="checkout-btn" disabled={cart.length === 0 || !activeTableId} onClick={handleCheckout}>
           Complete Order
         </button>
       </aside>
