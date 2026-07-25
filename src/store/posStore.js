@@ -17,7 +17,7 @@ export const usePosStore = create((set, get) => ({
   settings: null,
   tables: [],
   activeTableId: null,
-  cartsByTable: {}, // { [tableId]: [{menu_item_id, name, price, qty}] }
+  cartsByTable: {},
 
   async loadAll() {
     try {
@@ -47,9 +47,11 @@ export const usePosStore = create((set, get) => ({
     set({ settings });
   },
 
-  async addMenuItem({ name, price, category, initialStock }) {
-    const item = await db.upsertMenuItem({ id: crypto.randomUUID(), name, price, category });
-    await db.setInitialStock(item.id, initialStock ?? 0);
+  async addMenuItem({ name, price, category, initialStock, unlimited }) {
+    const item = await db.upsertMenuItem({ id: crypto.randomUUID(), name, price, category, unlimited: !!unlimited });
+    if (!unlimited) {
+      await db.setInitialStock(item.id, initialStock ?? 0);
+    }
     await get().loadAll();
   },
 
@@ -68,8 +70,6 @@ export const usePosStore = create((set, get) => ({
     await db.applyStockDelta(menuItemId, delta, reason);
     await get().loadAll();
   },
-
-  // ---------- Tables ----------
 
   async addTable(name) {
     await db.addTable(name);
@@ -94,25 +94,26 @@ export const usePosStore = create((set, get) => ({
     set({ activeTableId: tableId });
   },
 
-  // ---------- Cart (scoped to the active table) ----------
-
   addToCart(item) {
     const tableId = get().activeTableId;
     if (!tableId) return;
 
     set((state) => {
-      const stock = state.inventory.find((i) => i.menu_item_id === item.id)?.stock ?? 0;
       const cart = state.cartsByTable[tableId] || [];
       const existing = cart.find((c) => c.menu_item_id === item.id);
-      const currentQty = existing?.qty ?? 0;
-      const available = Math.max(stock - currentQty, 0);
-      if (available <= 0) return state;
+
+      if (!item.unlimited) {
+        const stock = state.inventory.find((i) => i.menu_item_id === item.id)?.stock ?? 0;
+        const currentQty = existing?.qty ?? 0;
+        const available = Math.max(stock - currentQty, 0);
+        if (available <= 0) return state;
+      }
 
       const newCart = existing
         ? cart.map((c) => (c.menu_item_id === item.id ? { ...c, qty: c.qty + 1 } : c))
-        : [...cart, { menu_item_id: item.id, name: item.name, price: item.price, qty: 1 }];
+        : [...cart, { menu_item_id: item.id, name: item.name, price: item.price, qty: 1, unlimited: !!item.unlimited }];
 
-      db.setOpenCart(tableId, newCart); // persist so a refresh doesn't lose this table's order
+      db.setOpenCart(tableId, newCart);
       return { cartsByTable: { ...state.cartsByTable, [tableId]: newCart } };
     });
   },
@@ -127,8 +128,12 @@ export const usePosStore = create((set, get) => ({
       if (qty <= 0) {
         newCart = cart.filter((c) => c.menu_item_id !== menuItemId);
       } else {
-        const stock = state.inventory.find((i) => i.menu_item_id === menuItemId)?.stock ?? 0;
-        const clampedQty = Math.min(qty, stock);
+        const line = cart.find((c) => c.menu_item_id === menuItemId);
+        let clampedQty = qty;
+        if (!line?.unlimited) {
+          const stock = state.inventory.find((i) => i.menu_item_id === menuItemId)?.stock ?? 0;
+          clampedQty = Math.min(qty, stock);
+        }
         newCart = cart.map((c) => (c.menu_item_id === menuItemId ? { ...c, qty: clampedQty } : c));
       }
 
@@ -172,11 +177,13 @@ export const usePosStore = create((set, get) => ({
         table_id: tableId,
         table_name: table?.name ?? null,
       },
-      cart.map((line) => ({
-        menu_item_id: line.menu_item_id,
-        delta: -line.qty,
-        reason: 'sale',
-      }))
+      cart
+        .filter((line) => !line.unlimited)
+        .map((line) => ({
+          menu_item_id: line.menu_item_id,
+          delta: -line.qty,
+          reason: 'sale',
+        }))
     );
 
     await db.clearOpenCart(tableId);

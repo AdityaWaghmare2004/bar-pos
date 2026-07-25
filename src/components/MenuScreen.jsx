@@ -7,7 +7,7 @@ export default function MenuScreen() {
   const editMenuItem = usePosStore((s) => s.editMenuItem);
   const deleteMenuItem = usePosStore((s) => s.deleteMenuItem);
 
-  const [form, setForm] = useState({ name: '', price: '', category: '', initialStock: '' });
+  const [form, setForm] = useState({ name: '', price: '', category: '', initialStock: '', unlimited: false });
   const [editingItemId, setEditingItemId] = useState(null);
   const [editDraft, setEditDraft] = useState({ name: '', price: '', category: '' });
 
@@ -19,8 +19,9 @@ export default function MenuScreen() {
       price: parseFloat(form.price),
       category: form.category,
       initialStock: parseInt(form.initialStock || '0', 10),
+      unlimited: form.unlimited,
     });
-    setForm({ name: '', price: '', category: '', initialStock: '' });
+    setForm({ name: '', price: '', category: '', initialStock: '', unlimited: false });
   }
 
   function startEditing(item) {
@@ -58,12 +59,27 @@ export default function MenuScreen() {
         <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <input placeholder="Price" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
         <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-        <input placeholder="Initial stock" type="number" value={form.initialStock} onChange={(e) => setForm({ ...form, initialStock: e.target.value })} />
+        <label className="unlimited-toggle">
+          <input
+            type="checkbox"
+            checked={form.unlimited}
+            onChange={(e) => setForm({ ...form, unlimited: e.target.checked })}
+          />
+          Unlimited (not tracked)
+        </label>
+        {!form.unlimited && (
+          <input
+            placeholder="Initial stock"
+            type="number"
+            value={form.initialStock}
+            onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
+          />
+        )}
         <button type="submit">Add Item</button>
       </form>
 
       <table>
-        <thead><tr><th>Name</th><th>Price</th><th>Category</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Price</th><th>Category</th><th>Type</th><th></th></tr></thead>
         <tbody>
           {menuItems.map((item) => (
             <tr key={item.id}>
@@ -99,6 +115,7 @@ export default function MenuScreen() {
                   <span>{item.category}</span>
                 )}
               </td>
+              <td>{item.unlimited ? 'Unlimited' : 'Tracked'}</td>
               <td>
                 {editingItemId === item.id ? (
                   <>

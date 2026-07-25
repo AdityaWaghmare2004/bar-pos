@@ -26,7 +26,8 @@ export default function POSScreen() {
   const cur = settings?.currency || '₹';
   const stockFor = (id) => inventory.find((i) => i.menu_item_id === id)?.stock ?? 0;
   const cartQtyFor = (id) => cart.find((c) => c.menu_item_id === id)?.qty ?? 0;
-  const availableStockFor = (id) => Math.max(stockFor(id) - cartQtyFor(id), 0);
+  const availableStockFor = (item) =>
+    item.unlimited ? Infinity : Math.max(stockFor(item.id) - cartQtyFor(item.id), 0);
   const isTableOccupied = (tableId) => (cartsByTable?.[tableId] || []).length > 0;
 
   const categories = useMemo(() => {
@@ -98,7 +99,7 @@ export default function POSScreen() {
 
       <section className="menu-grid no-print">
         {filteredMenuItems.map((item) => {
-          const availableStock = availableStockFor(item.id);
+          const availableStock = availableStockFor(item);
           return (
             <button
               key={item.id}
@@ -109,7 +110,9 @@ export default function POSScreen() {
               <span className="tile-name">{item.name}</span>
               <span className="tile-price">{cur}{item.price}</span>
               <span className="tile-stock">
-                {availableStock <= 0 ? 'Out of stock' : `${availableStock} available`}
+                {item.unlimited
+                  ? 'Unlimited'
+                  : availableStock <= 0 ? 'Out of stock' : `${availableStock} available`}
               </span>
             </button>
           );
@@ -130,7 +133,7 @@ export default function POSScreen() {
               <input
                 type="number"
                 min="1"
-                max={stockFor(line.menu_item_id)}
+                max={line.unlimited ? undefined : stockFor(line.menu_item_id)}
                 value={line.qty}
                 onChange={(e) => {
                   const qty = Number(e.target.value);

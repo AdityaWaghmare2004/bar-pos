@@ -18,41 +18,26 @@ export default function InventoryScreen() {
           {menuItems.map((item) => (
             <tr key={item.id}>
               <td>{item.name}</td>
-              <td className={stockFor(item.id) <= 3 ? 'low-stock' : ''}>{stockFor(item.id)}</td>
-              <td className="px-4 py-3 align-middle">
-  <div className="flex items-center gap-3">
-    {/* Core Quantity Controls */}
-    <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50 p-1 shadow-sm">
-      <button 
-        onClick={() => adjustStock(item.id, -1)}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all active:scale-95"
-        title="Decrease by 1"
-      >
-        <span className="text-lg font-medium">−</span>
-      </button>
-      
-      <span className="w-8 text-center font-semibold text-gray-700">
-        {stockFor(item.id)} {/* Assuming you display the current stock here */}
-      </span>
-
-      <button 
-        onClick={() => adjustStock(item.id, 1)}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all active:scale-95"
-        title="Increase by 1"
-      >
-        <span className="text-lg font-medium">+</span>
-      </button>
-    </div>
-
-    {/* Quick Restock Action */}
-    <button 
-      onClick={() => adjustStock(item.id, 10)}
-      className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 border border-blue-100 hover:bg-blue-100 transition-colors active:scale-95"
-    >
-      +10 Restock
-    </button>
-  </div>
-</td>
+              {item.unlimited ? (
+                <>
+                  <td className="unlimited-label">Unlimited</td>
+                  <td className="empty-hint">Not tracked</td>
+                </>
+              ) : (
+                <>
+                  <td className={stockFor(item.id) <= 3 ? 'low-stock' : ''}>{stockFor(item.id)}</td>
+                  <td>
+                    <div className="qty-control">
+                      <button onClick={() => adjustStock(item.id, -1)} title="Decrease by 1">−</button>
+                      <span>{stockFor(item.id)}</span>
+                      <button onClick={() => adjustStock(item.id, 1)} title="Increase by 1">+</button>
+                    </div>
+                    <button className="restock-btn" onClick={() => adjustStock(item.id, 10)}>
+                      +10 Restock
+                    </button>
+                  </td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

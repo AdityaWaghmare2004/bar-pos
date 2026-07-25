@@ -15,77 +15,47 @@ const DB_NAME = 'bar-pos';
 const DB_VERSION = 3; // bumped when `tables` and `open_carts` were added
 
 let _dbInstance = null;
-let _seedingTables = null;
 
 export async function getDB() {
   if (_dbInstance) return _dbInstance;
 
   _dbInstance = await openDB(DB_NAME, DB_VERSION, {
     upgrade(db) {
-      // menu_items: id is a UUID we generate client-side, so it's stable
-      // whether the item was created online or offline.
       if (!db.objectStoreNames.contains('menu_items')) {
         const store = db.createObjectStore('menu_items', { keyPath: 'id' });
         store.createIndex('synced', 'synced');
       }
 
-      // inventory: keyed by menu_item_id (1 row per item). We store the
-      // LOCAL view of stock (for instant UI reads) plus a queue of
-      // pending deltas that haven't synced yet.
       if (!db.objectStoreNames.contains('inventory')) {
         const store = db.createObjectStore('inventory', { keyPath: 'menu_item_id' });
         store.createIndex('synced', 'synced');
       }
 
-      // pending_deltas: append-only log of "apply -N to item X" operations.
-      // This is what actually gets synced for inventory — never the
-      // absolute stock number. Cleared once confirmed applied server-side.
       if (!db.objectStoreNames.contains('pending_deltas')) {
         db.createObjectStore('pending_deltas', { keyPath: 'id' });
       }
 
-      // orders: append-only. Each order has a client-generated UUID so
-      // re-sending after a dropped connection is a safe no-op server-side.
       if (!db.objectStoreNames.contains('orders')) {
         const store = db.createObjectStore('orders', { keyPath: 'id' });
         store.createIndex('synced', 'synced');
       }
 
-      // settings: a SINGLETON row (always keyed 'main') — the bar's own
-      // name/location/tax rate. Same conflict rule as menu_items
-      // (last-write-wins on updated_at), since only an owner edits this,
-      // rarely, one device at a time.
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings', { keyPath: 'id' });
       }
 
-      // tables: fixed list (Table 1, Table 2, ...). Local-only for now —
-      // not synced to Supabase, so "occupied" status is per-terminal.
-      // Known limitation: a second terminal won't see this terminal's
-      // open tables. Fine for a single-terminal bar; would need syncing
-      // (same LWW pattern as menu_items) if multiple terminals need a
-      // shared live view of table status.
       if (!db.objectStoreNames.contains('tables')) {
         db.createObjectStore('tables', { keyPath: 'id' });
       }
 
-      // open_carts: one row per table holding its in-progress order.
-      // Persisted (not just React state) so a refresh mid-shift doesn't
-      // lose a half-built order for some other table.
       if (!db.objectStoreNames.contains('open_carts')) {
         db.createObjectStore('open_carts', { keyPath: 'table_id' });
       }
     },
-    // Fires on THIS tab's existing connection when another tab/window
-    // tries to open a newer version. Without closing here, that other
-    // tab's upgrade silently blocks forever and every DB call there fails.
     blocking() {
       _dbInstance?.close();
       _dbInstance = null;
     },
-    // Fires on the tab trying to upgrade, if an older connection (in
-    // another tab) hasn't closed yet. Surface this clearly instead of
-    // failing silently — this was the "Business Info form is blank" bug.
     blocked() {
       console.warn(
         '[bar-pos] IndexedDB upgrade is blocked by another open tab of this app. ' +
@@ -101,7 +71,7 @@ export async function getDB() {
 
 export async function upsertMenuItem(item) {
   const db = await getDB();
-  const record = { ...item, updated_at: Date.now(), synced: false };
+  const record = { unlimited: false, ...item, updated_at: Date.now(), synced: false };
   await db.put('menu_items', record);
   return record;
 }
@@ -132,13 +102,11 @@ export async function getInventory() {
 }
 
 export async function setInitialStock(menuItemId, quantity) {
-  const db = await getDB();
-  await db.put('inventory', { menu_item_id: menuItemId, stock: quantity, synced: false });
+  if (quantity > 0) {
+    await applyStockDelta(menuItemId, quantity, 'initial_stock');
+  }
 }
 
-// The ONLY way stock should change. Never write an absolute number here —
-// always a signed delta. Negative for sales, positive for restocks/manual
-// corrections. This is what makes concurrent terminals safe to merge.
 export async function applyStockDelta(menuItemId, delta, reason) {
   const db = await getDB();
   const tx = db.transaction(['inventory', 'pending_deltas'], 'readwrite');
@@ -155,7 +123,7 @@ export async function applyStockDelta(menuItemId, delta, reason) {
     id: crypto.randomUUID(),
     menu_item_id: menuItemId,
     delta,
-    reason, // 'sale' | 'manual_adjustment' | 'restock'
+    reason,
     created_at: Date.now(),
   });
 
@@ -187,9 +155,6 @@ export async function createOrder(order) {
   return record;
 }
 
-// Wraps the order insert + every stock delta it causes into a SINGLE
-// IndexedDB transaction. Without this, a crash mid-checkout could leave
-// an order recorded with stock never deducted (or the reverse).
 export async function createOrderWithInventoryDeltas(order, deltas) {
   const database = await getDB();
   const record = {
@@ -255,7 +220,7 @@ export async function getSettings() {
       tax_rate: 0.05,
       receipt_footer: 'Thank you!',
       updated_at: 0,
-      synced: true, // nothing to sync until the owner actually edits it
+      synced: true,
     }
   );
 }
@@ -269,6 +234,8 @@ export async function updateSettings(changes) {
 }
 
 // ---------- Tables ----------
+
+let _seedingTables = null;
 
 export async function getTables() {
   const database = await getDB();
@@ -287,7 +254,6 @@ export async function getTables() {
       return defaults;
     })();
   }
-
   return _seedingTables;
 }
 
@@ -303,8 +269,7 @@ export async function deleteTable(id) {
   await database.delete('tables', id);
 }
 
-// ---------- Open carts (one per table, persisted so a refresh doesn't
-// lose an in-progress order) ----------
+// ---------- Open carts ----------
 
 export async function getAllOpenCarts() {
   const database = await getDB();
@@ -321,8 +286,7 @@ export async function clearOpenCart(tableId) {
   await database.delete('open_carts', tableId);
 }
 
-// ---------- Full DB export/import (last-resort manual backup, kept
-// as a safety net even though Supabase sync is now the primary backup) ----------
+// ---------- Full DB export/import ----------
 
 export async function exportAllData() {
   const db = await getDB();

@@ -1,7 +1,6 @@
 import { supabase, hasSupabaseConfig } from './supabase';
 import { usePosStore } from '../store/posStore';
 import {
-  getAllMenuItems,
   getAllMenuItemsIncludingDeleted,
   getAllOrders,
   getPendingDeltas,
@@ -14,7 +13,7 @@ import {
 let syncing = false;
 
 export async function runSync() {
-  if (syncing) return; // don't overlap runs
+  if (syncing) return;
   if (!navigator.onLine || !hasSupabaseConfig()) return;
   syncing = true;
 
@@ -23,10 +22,10 @@ export async function runSync() {
   let settingsChanged = false;
 
   try {
-    await syncOrders(); // append-only, insert-once
-    inventoryChanged = await syncInventory(); // deltas, never overwrite
-    menuChanged = await syncMenuItems(); // bidirectional menu item sync
-    settingsChanged = await syncSettings(); // bidirectional settings sync
+    await syncOrders();
+    inventoryChanged = await syncInventory();
+    menuChanged = await syncMenuItems();
+    settingsChanged = await syncSettings();
 
     if (inventoryChanged || menuChanged || settingsChanged) {
       await usePosStore.getState().loadAll();
@@ -53,8 +52,6 @@ async function syncOrders() {
     table_name: o.table_name,
   }));
 
-  // upsert + ignoreDuplicates makes a re-sent order after a dropped
-  // connection a safe no-op — it can never double-count revenue.
   const { error } = await supabase
     .from('orders')
     .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
@@ -67,7 +64,6 @@ async function syncInventory() {
   const deltas = await getPendingDeltas();
   let changed = false;
 
-  // Push: apply every local delta atomically server-side.
   for (const d of deltas) {
     const { error } = await supabase.rpc('apply_inventory_delta', {
       p_menu_item_id: d.menu_item_id,
@@ -78,11 +74,6 @@ async function syncInventory() {
     changed = true;
   }
 
-  // Pull: fetch the merged, authoritative stock counts (now reflecting
-  // every device's deltas, not just this one) and overwrite local
-  // values. Without this step, a stock change made on one device never
-  // shows up on another — each device only ever saw its OWN deltas
-  // applied locally, never anyone else's.
   const { data: remoteInventory, error: pullError } = await supabase
     .from('inventory')
     .select('*');
@@ -132,8 +123,9 @@ async function syncMenuItems() {
           name: remoteItem.name,
           price: Number(remoteItem.price),
           category: remoteItem.category,
-          deleted: Boolean(remoteItem.deleted),
           updated_at: remoteUpdatedAt,
+          deleted: remoteItem.deleted ?? false,
+          unlimited: remoteItem.unlimited ?? false,
           synced: true,
         });
         baseChangeMade = true;
@@ -150,8 +142,9 @@ async function syncMenuItems() {
         p_name: item.name,
         p_price: item.price,
         p_category: item.category ?? null,
-        p_deleted: Boolean(item.deleted),
         p_updated_at: new Date(item.updated_at).toISOString(),
+        p_deleted: item.deleted ?? false,
+        p_unlimited: item.unlimited ?? false,
       });
       if (error) throw error;
       await markSynced('menu_items', item.id);
@@ -214,8 +207,6 @@ async function syncSettings() {
   return settingsChanged;
 }
 
-// Call once at app startup: sync immediately, then on an interval, and
-// whenever the browser regains connectivity.
 export function startSyncLoop(intervalMs = 15000) {
   runSync();
   const interval = setInterval(runSync, intervalMs);
