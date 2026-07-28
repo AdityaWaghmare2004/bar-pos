@@ -7,6 +7,8 @@ import {
   clearPendingDelta,
   markSynced,
   getSettings,
+  getAllTablesIncludingDeleted,
+  getAllOpenCarts,
   getDB,
 } from './db';
 
@@ -20,14 +22,18 @@ export async function runSync() {
   let inventoryChanged = false;
   let menuChanged = false;
   let settingsChanged = false;
+  let tablesChanged = false;
+  let cartsChanged = false;
 
   try {
     await syncOrders();
     inventoryChanged = await syncInventory();
     menuChanged = await syncMenuItems();
     settingsChanged = await syncSettings();
+    tablesChanged = await syncTables();
+    cartsChanged = await syncOpenCarts();
 
-    if (inventoryChanged || menuChanged || settingsChanged) {
+    if (inventoryChanged || menuChanged || settingsChanged || tablesChanged || cartsChanged) {
       await usePosStore.getState().loadAll();
     }
   } catch (err) {
@@ -64,6 +70,7 @@ async function syncInventory() {
   const deltas = await getPendingDeltas();
   let changed = false;
 
+  // Push: apply every local delta atomically server-side.
   for (const d of deltas) {
     const { error } = await supabase.rpc('apply_inventory_delta', {
       p_menu_item_id: d.menu_item_id,
@@ -74,6 +81,11 @@ async function syncInventory() {
     changed = true;
   }
 
+  // Pull: fetch the merged, authoritative stock counts (now reflecting
+  // every device's deltas, not just this one) and overwrite local
+  // values. Without this step, a stock change made on one device never
+  // shows up on another — each device only ever saw its OWN deltas
+  // applied locally, never anyone else's.
   const { data: remoteInventory, error: pullError } = await supabase
     .from('inventory')
     .select('*');
@@ -84,6 +96,9 @@ async function syncInventory() {
     const tx = db.transaction('inventory', 'readwrite');
     for (const row of remoteInventory) {
       const local = await tx.objectStore('inventory').get(row.menu_item_id);
+      // Only overwrite if this item has no pending local delta left
+      // in flight — otherwise we could momentarily overwrite with a
+      // slightly stale value while our own push is still in progress.
       if (local?.stock !== row.stock) {
         await tx.objectStore('inventory').put({
           menu_item_id: row.menu_item_id,
@@ -100,7 +115,7 @@ async function syncInventory() {
 }
 
 async function syncMenuItems() {
-  const items = await getAllMenuItemsIncludingDeleted();
+  const items = await getAllMenuItemsIncludingDeleted(); // sync must see tombstones too
   const db = await getDB();
 
   const { data: remoteItems, error: pullError } = await supabase
@@ -205,6 +220,106 @@ async function syncSettings() {
   }
 
   return settingsChanged;
+}
+
+async function syncTables() {
+  const tables = await getAllTablesIncludingDeleted();
+  const db = await getDB();
+
+  const { data: remoteTables, error: pullError } = await supabase
+    .from('tables')
+    .select('*');
+  if (pullError) throw pullError;
+
+  let changed = false;
+
+  if (remoteTables?.length > 0) {
+    const tx = db.transaction('tables', 'readwrite');
+    for (const remoteTable of remoteTables) {
+      const localTable = tables.find((t) => t.id === remoteTable.id);
+      const remoteUpdatedAt = new Date(remoteTable.updated_at).getTime();
+
+      if (!localTable || remoteUpdatedAt > (localTable.updated_at || 0)) {
+        await tx.objectStore('tables').put({
+          id: remoteTable.id,
+          name: remoteTable.name,
+          updated_at: remoteUpdatedAt,
+          deleted: remoteTable.deleted ?? false,
+          synced: true,
+        });
+        changed = true;
+      }
+    }
+    await tx.done;
+  }
+
+  const unsynced = tables.filter((t) => !t.synced);
+  if (unsynced.length > 0) {
+    for (const table of unsynced) {
+      const { error } = await supabase.rpc('upsert_table', {
+        p_id: table.id,
+        p_name: table.name,
+        p_updated_at: new Date(table.updated_at).toISOString(),
+        p_deleted: table.deleted ?? false,
+      });
+      if (error) throw error;
+      await markSynced('tables', table.id);
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+// Same last-write-wins pattern as menu items/settings. Two staff members
+// editing the SAME table's order in the exact same second is rare enough
+// that a small "one edit could be overwritten" risk is an acceptable
+// tradeoff versus the complexity of merging concurrent cart edits.
+async function syncOpenCarts() {
+  const carts = await getAllOpenCarts();
+  const db = await getDB();
+
+  const { data: remoteCarts, error: pullError } = await supabase
+    .from('open_carts')
+    .select('*');
+  if (pullError) throw pullError;
+
+  let changed = false;
+
+  if (remoteCarts?.length > 0) {
+    const tx = db.transaction('open_carts', 'readwrite');
+    for (const remoteCart of remoteCarts) {
+      const localCart = carts.find((c) => c.table_id === remoteCart.table_id);
+      const remoteUpdatedAt = new Date(remoteCart.updated_at).getTime();
+
+      if (!localCart || remoteUpdatedAt > (localCart.updated_at || 0)) {
+        await tx.objectStore('open_carts').put({
+          table_id: remoteCart.table_id,
+          cart: remoteCart.cart || [],
+          updated_at: remoteUpdatedAt,
+          synced: true,
+        });
+        changed = true;
+      }
+    }
+    await tx.done;
+  }
+
+  const unsynced = carts.filter((c) => !c.synced);
+  if (unsynced.length > 0) {
+    for (const cart of unsynced) {
+      const { error } = await supabase.rpc('upsert_open_cart', {
+        p_table_id: cart.table_id,
+        p_cart: cart.cart,
+        p_updated_at: new Date(cart.updated_at).toISOString(),
+      });
+      if (error) throw error;
+      await markSynced('open_carts', cart.table_id);
+    }
+    changed = true;
+  }
+
+  return changed;
 }
 
 export function startSyncLoop(intervalMs = 15000) {

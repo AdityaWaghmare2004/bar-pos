@@ -5,12 +5,17 @@
   --accent: #2f6f4f;
   --danger: #b3432b;
   font-family: 'Segoe UI', system-ui, sans-serif;
+  /* Without this, browsers running in dark mode apply their own default
+     text color to native controls (button, input) regardless of the
+     color you set on body — that's what made the header/buttons go
+     white-on-white. This pins the page to the light palette we designed. */
   color-scheme: light;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); }
 
+/* Native controls don't reliably inherit body's color — set it explicitly. */
 button, input { color: var(--ink); font-family: inherit; }
 
 .app { max-width: 1100px; margin: 0 auto; padding: 0 16px 40px; }
@@ -83,6 +88,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--lin
 .unlimited-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
 .unlimited-label { color: var(--accent); font-weight: 600; }
 .restock-btn { margin-left: 8px; }
+.type-edit { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.type-edit input[type="number"] { padding: 4px 6px; width: 100px; }
 
 .business-info-card {
   border: 1px solid var(--line); border-radius: 16px; padding: 24px; background: white;
@@ -103,6 +110,7 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--lin
 .empty-hint { color: #888; font-style: italic; }
 .status-msg { margin-top: 10px; color: var(--accent); }
 
+/* ---- Print / receipt ---- */
 .print-only { display: none; }
 
 @media print {
@@ -114,6 +122,11 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--lin
   .no-print { display: none !important; }
   .print-only { display: block; }
 
+  /* Force light background + black text explicitly. Without !important
+     here, some mobile browsers apply their own dark-mode rendering when
+     printing/exporting to PDF and ignore the plain (non-!important)
+     background/color rules above — that's what was turning the receipt
+     solid black on phones. */
   html, body {
     background: #ffffff !important;
     color: #000000 !important;

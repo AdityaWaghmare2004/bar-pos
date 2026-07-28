@@ -7,9 +7,11 @@ export default function MenuScreen() {
   const editMenuItem = usePosStore((s) => s.editMenuItem);
   const deleteMenuItem = usePosStore((s) => s.deleteMenuItem);
 
+  const setItemTracking = usePosStore((s) => s.setItemTracking);
+
   const [form, setForm] = useState({ name: '', price: '', category: '', initialStock: '', unlimited: false });
   const [editingItemId, setEditingItemId] = useState(null);
-  const [editDraft, setEditDraft] = useState({ name: '', price: '', category: '' });
+  const [editDraft, setEditDraft] = useState({ name: '', price: '', category: '', unlimited: false, initialStock: '' });
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -26,25 +28,42 @@ export default function MenuScreen() {
 
   function startEditing(item) {
     setEditingItemId(item.id);
-    setEditDraft({ name: item.name, price: item.price.toString(), category: item.category || '' });
+    setEditDraft({
+      name: item.name,
+      price: item.price.toString(),
+      category: item.category || '',
+      unlimited: !!item.unlimited,
+      initialStock: '',
+    });
   }
 
   async function saveEdit(itemId) {
+    const original = menuItems.find((i) => i.id === itemId);
     const updates = {};
-    if (editDraft.name.trim() && editDraft.name !== menuItems.find((i) => i.id === itemId)?.name) {
+    if (editDraft.name.trim() && editDraft.name !== original?.name) {
       updates.name = editDraft.name.trim();
     }
     const priceValue = parseFloat(editDraft.price);
-    if (!Number.isNaN(priceValue) && priceValue !== menuItems.find((i) => i.id === itemId)?.price) {
+    if (!Number.isNaN(priceValue) && priceValue !== original?.price) {
       updates.price = priceValue;
     }
-    if (editDraft.category !== menuItems.find((i) => i.id === itemId)?.category) {
+    if (editDraft.category !== original?.category) {
       updates.category = editDraft.category;
     }
 
     if (Object.keys(updates).length > 0) {
       await editMenuItem(itemId, updates);
     }
+
+    // Tracking type changed — handled separately since switching to
+    // "tracked" needs a starting stock count.
+    if (!!original?.unlimited !== editDraft.unlimited) {
+      await setItemTracking(itemId, {
+        unlimited: editDraft.unlimited,
+        initialStock: parseInt(editDraft.initialStock || '0', 10),
+      });
+    }
+
     setEditingItemId(null);
   }
 
@@ -115,7 +134,30 @@ export default function MenuScreen() {
                   <span>{item.category}</span>
                 )}
               </td>
-              <td>{item.unlimited ? 'Unlimited' : 'Tracked'}</td>
+              <td>
+                {editingItemId === item.id ? (
+                  <div className="type-edit">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={editDraft.unlimited}
+                        onChange={(e) => setEditDraft({ ...editDraft, unlimited: e.target.checked })}
+                      />
+                      Unlimited
+                    </label>
+                    {item.unlimited && !editDraft.unlimited && (
+                      <input
+                        type="number"
+                        placeholder="Starting stock"
+                        value={editDraft.initialStock}
+                        onChange={(e) => setEditDraft({ ...editDraft, initialStock: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  item.unlimited ? 'Unlimited' : 'Tracked'
+                )}
+              </td>
               <td>
                 {editingItemId === item.id ? (
                   <>

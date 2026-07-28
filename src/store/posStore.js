@@ -61,6 +61,20 @@ export const usePosStore = create((set, get) => ({
     await get().loadAll();
   },
 
+  // Switching an item's tracking type needs special handling:
+  // - unlimited -> tracked: there's no existing stock row, so an
+  //   initial count must be supplied (defaults to 0 if not given).
+  // - tracked -> unlimited: the old inventory row is simply ignored
+  //   from then on (harmless to leave behind).
+  async setItemTracking(id, { unlimited, initialStock }) {
+    const existing = get().menuItems.find((m) => m.id === id);
+    await db.upsertMenuItem({ ...existing, id, unlimited });
+    if (!unlimited) {
+      await db.setInitialStock(id, initialStock ?? 0);
+    }
+    await get().loadAll();
+  },
+
   async deleteMenuItem(id) {
     await db.deleteMenuItem(id);
     await get().loadAll();
