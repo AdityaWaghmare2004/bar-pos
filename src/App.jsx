@@ -5,6 +5,7 @@ import POSScreen from './components/POSScreen';
 import InventoryScreen from './components/InventoryScreen';
 import MenuScreen from './components/MenuScreen';
 import SettingsScreen from './components/SettingsScreen';
+import HistoryScreen from './components/HistoryScreen';
 import './App.css';
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
       <header className="app-header no-print">
         <h1>Bar POS</h1>
         <nav>
-          {['pos', 'inventory', 'menu', 'settings'].map((t) => (
+          {['pos', 'history', 'inventory', 'menu', 'settings'].map((t) => (
             <button
               key={t}
               className={tab === t ? 'active' : ''}
@@ -36,6 +37,7 @@ export default function App() {
 
       <main>
         {tab === 'pos' && <POSScreen />}
+        {tab === 'history' && <HistoryScreen />}
         {tab === 'inventory' && <InventoryScreen />}
         {tab === 'menu' && <MenuScreen />}
         {tab === 'settings' && <SettingsScreen />}

@@ -97,31 +97,6 @@ export default function POSScreen() {
         </div>
       </section>
 
-      <section className="menu-grid no-print">
-        {filteredMenuItems.map((item) => {
-          const availableStock = availableStockFor(item);
-          return (
-            <button
-              key={item.id}
-              className="menu-tile"
-              disabled={availableStock <= 0 || !activeTableId}
-              onClick={() => addToCart(item)}
-            >
-              <span className="tile-name">{item.name}</span>
-              <span className="tile-price">{cur}{item.price}</span>
-              <span className="tile-stock">
-                {item.unlimited
-                  ? 'Unlimited'
-                  : availableStock <= 0 ? 'Out of stock' : `${availableStock} available`}
-              </span>
-            </button>
-          );
-        })}
-        {filteredMenuItems.length === 0 && (
-          <p className="empty-hint">No items in this category.</p>
-        )}
-      </section>
-
       <aside className="cart no-print">
         <h2>{tables.find((t) => t.id === activeTableId)?.name || 'Select a table'}</h2>
         {cart.length === 0 && <p className="empty-hint">Cart is empty</p>}
@@ -156,6 +131,31 @@ export default function POSScreen() {
           Complete Order
         </button>
       </aside>
+
+      <section className="menu-grid no-print">
+        {filteredMenuItems.map((item) => {
+          const availableStock = availableStockFor(item);
+          return (
+            <button
+              key={item.id}
+              className="menu-tile"
+              disabled={availableStock <= 0 || !activeTableId}
+              onClick={() => addToCart(item)}
+            >
+              <span className="tile-name">{item.name}</span>
+              <span className="tile-price">{cur}{item.price}</span>
+              <span className="tile-stock">
+                {item.unlimited
+                  ? 'Unlimited'
+                  : availableStock <= 0 ? 'Out of stock' : `${availableStock} available`}
+              </span>
+            </button>
+          );
+        })}
+        {filteredMenuItems.length === 0 && (
+          <p className="empty-hint">No items in this category.</p>
+        )}
+      </section>
 
       {lastOrder && <Receipt order={lastOrder} />}
     </div>
