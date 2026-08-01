@@ -13,6 +13,7 @@ function formatOrderDate(value) {
 export default function HistoryScreen() {
   const orders = usePosStore((s) => s.orders);
   const settings = usePosStore((s) => s.settings);
+  const deleteOrder = usePosStore((s) => s.deleteOrder);
   const currency = settings?.currency || '₹';
 
   const sortedOrders = useMemo(
@@ -48,6 +49,13 @@ export default function HistoryScreen() {
             const tax = Number(order.tax || 0);
             const total = Number(order.total || subtotal + tax);
 
+            const handleDelete = () => {
+              const confirmed = window.confirm(
+                `Delete this transaction for ${currency}${total.toFixed(2)}? Stock will be restored.`
+              );
+              if (confirmed) deleteOrder(order.id);
+            };
+
             return (
               <article key={order.id} className="history-card">
                 <div className="history-card-top">
@@ -58,7 +66,12 @@ export default function HistoryScreen() {
                       {order.table_name ? `Table: ${order.table_name}` : 'No table assigned'}
                     </p>
                   </div>
-                  <div className="history-total">{currency}{total.toFixed(2)}</div>
+                  <div className="history-total-group">
+                    <div className="history-total">{currency}{total.toFixed(2)}</div>
+                    <button type="button" className="delete-order-btn" onClick={handleDelete}>
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 <ul className="history-items">

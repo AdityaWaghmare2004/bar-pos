@@ -245,6 +245,40 @@ export async function getAllOrders() {
   return db.getAll('orders');
 }
 
+export async function deleteOrderAndRestoreInventory(orderId) {
+  const database = await getDB();
+  const tx = database.transaction(['orders', 'inventory', 'pending_deltas'], 'readwrite');
+  const order = await tx.objectStore('orders').get(orderId);
+
+  if (!order) {
+    await tx.done;
+    return false;
+  }
+
+  for (const item of order.items || []) {
+    if (item.unlimited || !item.menu_item_id) continue;
+
+    const current = await tx.objectStore('inventory').get(item.menu_item_id);
+    const quantity = Number(item.qty || 0);
+    await tx.objectStore('inventory').put({
+      menu_item_id: item.menu_item_id,
+      stock: (current?.stock ?? 0) + quantity,
+      synced: false,
+    });
+    await tx.objectStore('pending_deltas').add({
+      id: crypto.randomUUID(),
+      menu_item_id: item.menu_item_id,
+      delta: quantity,
+      reason: 'sale_reversal',
+      created_at: Date.now(),
+    });
+  }
+
+  await tx.objectStore('orders').delete(orderId);
+  await tx.done;
+  return true;
+}
+
 export async function markSynced(storeName, id) {
   const db = await getDB();
   const record = await db.get(storeName, id);

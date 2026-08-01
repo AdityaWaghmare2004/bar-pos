@@ -80,6 +80,11 @@ export const usePosStore = create((set, get) => ({
     await get().loadAll();
   },
 
+  async deleteOrder(id) {
+    await db.deleteOrderAndRestoreInventory(id);
+    await get().loadAll();
+  },
+
   async adjustStock(menuItemId, delta, reason = 'manual_adjustment') {
     await db.applyStockDelta(menuItemId, delta, reason);
     await get().loadAll();

@@ -336,6 +336,26 @@ th { background: #f4efe4; font-weight: 700; font-size: 0.85rem; text-transform: 
   color: var(--accent);
   white-space: nowrap;
 }
+.history-total-group {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+.delete-order-btn {
+  padding: 5px 9px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.delete-order-btn:hover {
+  background: var(--danger);
+  color: white;
+}
 .history-items {
   list-style: none;
   padding: 0;
